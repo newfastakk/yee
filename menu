@@ -1,0 +1,975 @@
+--[[
+    kanxma beta — Меню с вкладками ESP / AIM / MISC
+    Что нового:
+      • Слайдеры фиксированы для мобильных устройств (учтён Touch-ввод).
+      • Новая вкладка "MISC" с Chams (Highlight), RGB/Transparency слайдерами, 
+        настройкой дополнительного FOV для камеры, и кнопкой Teleport Kill.
+--]]
+
+--///////////// SERVICES //////////////
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local TweenService = game:GetService("TweenService")
+local UserInputService = game:GetService("UserInputService")
+local Workspace = game:GetService("Workspace")
+local Camera = Workspace.CurrentCamera
+local LocalPlayer = Players.LocalPlayer
+
+--///////////// ПЕРЕМЕННЫЕ ДЛЯ ESP //////////////
+local ESP_Enabled = false
+local ESP_Boxes = false
+local ESP_Skeleton = false
+local ESP_HP = false
+local ESP_Distance = false
+local ESP_TeamCheck = false
+
+--///////////// ПЕРЕМЕННЫЕ ДЛЯ AIMLOCK //////////////
+local AIM_ENABLED = false
+local AIM_TeamCheck = false
+local AIM_FOV_RADIUS = 70
+local AIM_SMOOTHNESS = 0.14
+local AIM_Part = "Head"  -- варианты: "Head", "Chest", "Arms", "Legs"
+
+--///////////// ПЕРЕМЕННЫЕ ДЛЯ MISC //////////////
+local CHAMS_Enabled = false
+local CHAMS_R = 255
+local CHAMS_G = 0
+local CHAMS_B = 0
+local CHAMS_Transparency = 0  -- 0 = непрозрачный, 1 = полностью прозрачный
+
+local CAMERA_FOV_Enabled = false
+local CAMERA_FOV_Value = 70    -- при включении будем ставить Camera.FieldOfView
+
+--///////////// FOV-КРУГ (Drawing API) ДЛЯ AIMLOCK //////////////
+local FOVCircle = Drawing.new("Circle")
+FOVCircle.Radius = AIM_FOV_RADIUS
+FOVCircle.Thickness = 1
+FOVCircle.Filled = false
+FOVCircle.Color = Color3.fromRGB(255,255,255)
+FOVCircle.Visible = false  -- показываем только если AIM включён
+
+RunService.RenderStepped:Connect(function()
+    -- Постоянно центрируем круг FOV
+    FOVCircle.Position = Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y/2)
+    FOVCircle.Radius = AIM_FOV_RADIUS
+end)
+
+--///////////// ОСНОВНОЕ МЕНЮ (UI) //////////////
+local screenGui = script.Parent
+if not screenGui or not screenGui:IsA("ScreenGui") then
+    screenGui = Instance.new("ScreenGui")
+    screenGui.Name = "kanxmaBetaGui"
+    screenGui.Parent = game:GetService("CoreGui")
+end
+screenGui.ResetOnSpawn = false
+
+local MainFrame = Instance.new("Frame")
+MainFrame.Name = "MainFrame"
+MainFrame.Size = UDim2.new(0, 400, 0, 400)
+-- Изначально за экраном (слева)
+MainFrame.Position = UDim2.new(-0.5, 0, 0.5, -200)
+MainFrame.BackgroundColor3 = Color3.fromRGB(30,30,30)
+MainFrame.BorderSizePixel = 0
+MainFrame.Parent = screenGui
+
+local UICorner_Main = Instance.new("UICorner")
+UICorner_Main.CornerRadius = UDim.new(0,6)
+UICorner_Main.Parent = MainFrame
+
+-- Заголовок
+local TitleBar = Instance.new("Frame")
+TitleBar.Name = "TitleBar"
+TitleBar.Size = UDim2.new(1,0,0,30)
+TitleBar.BackgroundColor3 = Color3.fromRGB(45,45,45)
+TitleBar.Parent = MainFrame
+
+local TitleLabel = Instance.new("TextLabel")
+TitleLabel.Name = "TitleLabel"
+TitleLabel.Size = UDim2.new(1,-40,1,0)
+TitleLabel.Position = UDim2.new(0,10,0,0)
+TitleLabel.BackgroundTransparency = 1
+TitleLabel.Text = "kanxma beta"
+TitleLabel.TextColor3 = Color3.fromRGB(255,255,255)
+TitleLabel.Font = Enum.Font.SourceSansBold
+TitleLabel.TextSize = 20
+TitleLabel.TextXAlignment = Enum.TextXAlignment.Left
+TitleLabel.Parent = TitleBar
+
+local CloseBtn = Instance.new("TextButton")
+CloseBtn.Name = "CloseBtn"
+CloseBtn.Size = UDim2.new(0,30,0,30)
+CloseBtn.Position = UDim2.new(1,-30,0,0)
+CloseBtn.BackgroundTransparency = 1
+CloseBtn.Text = "X"
+CloseBtn.TextColor3 = Color3.fromRGB(255,0,0)
+CloseBtn.Font = Enum.Font.SourceSansBold
+CloseBtn.TextSize = 24
+CloseBtn.Parent = TitleBar
+
+--///////////// КНОПКИ ВКЛАДОК (ESP / AIM / MISC) //////////////
+local TabFrame = Instance.new("Frame")
+TabFrame.Name = "TabFrame"
+TabFrame.Size = UDim2.new(1,0,0,30)
+TabFrame.Position = UDim2.new(0,0,0,30)
+TabFrame.BackgroundColor3 = Color3.fromRGB(35,35,35)
+TabFrame.BorderSizePixel = 0
+TabFrame.Parent = MainFrame
+
+local ESPTabBtn = Instance.new("TextButton")
+ESPTabBtn.Name = "ESPTabBtn"
+ESPTabBtn.Size = UDim2.new(0,100,1,0)
+ESPTabBtn.Position = UDim2.new(0,0,0,0)
+ESPTabBtn.BackgroundColor3 = Color3.fromRGB(55,55,55)
+ESPTabBtn.Text = "ESP"
+ESPTabBtn.TextColor3 = Color3.fromRGB(255,255,255)
+ESPTabBtn.Font = Enum.Font.SourceSansBold
+ESPTabBtn.TextSize = 18
+ESPTabBtn.Parent = TabFrame
+
+local AimTabBtn = Instance.new("TextButton")
+AimTabBtn.Name = "AimTabBtn"
+AimTabBtn.Size = UDim2.new(0,100,1,0)
+AimTabBtn.Position = UDim2.new(0,100,0,0)
+AimTabBtn.BackgroundColor3 = Color3.fromRGB(35,35,35)
+AimTabBtn.Text = "AIM"
+AimTabBtn.TextColor3 = Color3.fromRGB(255,255,255)
+AimTabBtn.Font = Enum.Font.SourceSansBold
+AimTabBtn.TextSize = 18
+AimTabBtn.Parent = TabFrame
+
+local MiscTabBtn = Instance.new("TextButton")
+MiscTabBtn.Name = "MiscTabBtn"
+MiscTabBtn.Size = UDim2.new(0,100,1,0)
+MiscTabBtn.Position = UDim2.new(0,200,0,0)
+MiscTabBtn.BackgroundColor3 = Color3.fromRGB(35,35,35)
+MiscTabBtn.Text = "MISC"
+MiscTabBtn.TextColor3 = Color3.fromRGB(255,255,255)
+MiscTabBtn.Font = Enum.Font.SourceSansBold
+MiscTabBtn.TextSize = 18
+MiscTabBtn.Parent = TabFrame
+
+--///////////// ФРЕЙМЫ ДЛЯ КАЖДОЙ ВКЛАДКИ //////////////
+-- Делаем ScrollingFrame, чтобы элементы не налезали друг на друга
+local ESPFrame = Instance.new("ScrollingFrame")
+ESPFrame.Name = "ESPFrame"
+ESPFrame.Size = UDim2.new(1,0,1,-60)
+ESPFrame.Position = UDim2.new(0,0,0,60)
+ESPFrame.BackgroundTransparency = 1
+ESPFrame.Visible = true
+ESPFrame.BorderSizePixel = 0
+ESPFrame.ScrollBarThickness = 6
+ESPFrame.CanvasSize = UDim2.new(0,0,0,0)
+ESPFrame.Parent = MainFrame
+
+local AimFrame = Instance.new("ScrollingFrame")
+AimFrame.Name = "AimFrame"
+AimFrame.Size = UDim2.new(1,0,1,-60)
+AimFrame.Position = UDim2.new(0,0,0,60)
+AimFrame.BackgroundTransparency = 1
+AimFrame.Visible = false
+AimFrame.BorderSizePixel = 0
+AimFrame.ScrollBarThickness = 6
+AimFrame.CanvasSize = UDim2.new(0,0,0,0)
+AimFrame.Parent = MainFrame
+
+local MiscFrame = Instance.new("ScrollingFrame")
+MiscFrame.Name = "MiscFrame"
+MiscFrame.Size = UDim2.new(1,0,1,-60)
+MiscFrame.Position = UDim2.new(0,0,0,60)
+MiscFrame.BackgroundTransparency = 1
+MiscFrame.Visible = false
+MiscFrame.BorderSizePixel = 0
+MiscFrame.ScrollBarThickness = 6
+MiscFrame.CanvasSize = UDim2.new(0,0,0,0)
+MiscFrame.Parent = MainFrame
+
+-- Автоматический вертикальный список для каждого фрейма
+local function setupListLayout(frame)
+    local layout = Instance.new("UIListLayout")
+    layout.Padding = UDim.new(0,5)
+    layout.FillDirection = Enum.FillDirection.Vertical
+    layout.SortOrder = Enum.SortOrder.LayoutOrder
+    layout.Parent = frame
+
+    layout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+        frame.CanvasSize = UDim2.new(0,0,0,layout.AbsoluteContentSize.Y + 10)
+    end)
+end
+
+setupListLayout(ESPFrame)
+setupListLayout(AimFrame)
+setupListLayout(MiscFrame)
+
+--///////////// УТИЛИТЫ: CREATE CHECKBOX / SLIDER / BUTTON //////////////
+local function createCheckbox(parent, labelText, defaultValue, callback)
+    local container = Instance.new("Frame")
+    container.Size = UDim2.new(1, -10, 0, 30)
+    container.BackgroundTransparency = 1
+    container.LayoutOrder = #parent:GetChildren() + 1
+    container.Parent = parent
+
+    local checkLabel = Instance.new("TextLabel")
+    checkLabel.Size = UDim2.new(1, -40, 1, 0)
+    checkLabel.Position = UDim2.new(0,40,0,0)
+    checkLabel.BackgroundTransparency = 1
+    checkLabel.Text = labelText
+    checkLabel.TextColor3 = Color3.new(1,1,1)
+    checkLabel.Font = Enum.Font.SourceSans
+    checkLabel.TextSize = 18
+    checkLabel.TextXAlignment = Enum.TextXAlignment.Left
+    checkLabel.Parent = container
+
+    local box = Instance.new("TextButton")
+    box.Size = UDim2.new(0,30,0,30)
+    box.BackgroundColor3 = defaultValue and Color3.fromRGB(0,255,0) or Color3.fromRGB(60,60,60)
+    box.Text = defaultValue and "✓" or ""
+    box.TextColor3 = Color3.new(0,0,0)
+    box.Font = Enum.Font.SourceSansBold
+    box.TextSize = 24
+    box.Parent = container
+
+    local function setChecked(state)
+        if state then
+            box.BackgroundColor3 = Color3.fromRGB(0,255,0)
+            box.Text = "✓"
+        else
+            box.BackgroundColor3 = Color3.fromRGB(60,60,60)
+            box.Text = ""
+        end
+        callback(state)
+    end
+
+    box.MouseButton1Click:Connect(function()
+        defaultValue = not defaultValue
+        setChecked(defaultValue)
+    end)
+end
+
+local function createSlider(parent, labelText, minVal, maxVal, defaultVal, callback)
+    local container = Instance.new("Frame")
+    container.Size = UDim2.new(1, -10, 0, 50)
+    container.BackgroundTransparency = 1
+    container.LayoutOrder = #parent:GetChildren() + 1
+    container.Parent = parent
+
+    local sliderLabel = Instance.new("TextLabel")
+    sliderLabel.Size = UDim2.new(1, 0, 0, 20)
+    sliderLabel.BackgroundTransparency = 1
+    sliderLabel.Text = labelText .. ": " .. tostring(defaultVal)
+    sliderLabel.TextColor3 = Color3.new(1,1,1)
+    sliderLabel.Font = Enum.Font.SourceSans
+    sliderLabel.TextSize = 18
+    sliderLabel.TextXAlignment = Enum.TextXAlignment.Left
+    sliderLabel.Parent = container
+
+    local sliderBack = Instance.new("Frame")
+    sliderBack.Size = UDim2.new(1, 0, 0, 8)
+    sliderBack.Position = UDim2.new(0, 0, 0, 25)
+    sliderBack.BackgroundColor3 = Color3.fromRGB(60,60,60)
+    sliderBack.Parent = container
+
+    local fill = Instance.new("Frame")
+    fill.Size = UDim2.new((defaultVal - minVal)/(maxVal - minVal), 0, 1, 0)
+    fill.BackgroundColor3 = Color3.fromRGB(0,255,0)
+    fill.Parent = sliderBack
+
+    local dragBtn = Instance.new("TextButton")
+    dragBtn.Size = UDim2.new(0,12,0,12)
+    dragBtn.Position = UDim2.new(fill.Size.X.Scale, -6, 0.5, -6)
+    dragBtn.BackgroundColor3 = Color3.fromRGB(255,255,255)
+    dragBtn.Text = ""
+    dragBtn.Parent = sliderBack
+
+    local currentValue = defaultVal
+
+    local function updateSlider(inputX)
+        local relX = math.clamp(inputX - sliderBack.AbsolutePosition.X, 0, sliderBack.AbsoluteSize.X)
+        local percent = relX / sliderBack.AbsoluteSize.X
+        local value = minVal + (maxVal - minVal)*percent
+        -- Округлим/форматируем при желании
+        value = math.floor(value*100)/100
+        currentValue = value
+
+        fill.Size = UDim2.new(percent, 0, 1, 0)
+        dragBtn.Position = UDim2.new(percent, -6, 0.5, -6)
+        sliderLabel.Text = labelText .. ": " .. tostring(value)
+
+        callback(value)
+    end
+
+    -- Фикс для мобильных устройств (Touch)
+    local dragging = false
+
+    local function onInputBegan(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 
+        or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = true
+        end
+    end
+
+    local function onInputEnded(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1
+        or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = false
+        end
+    end
+
+    dragBtn.InputBegan:Connect(onInputBegan)
+    dragBtn.InputEnded:Connect(onInputEnded)
+
+    UserInputService.InputChanged:Connect(function(input)
+        if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement 
+                     or input.UserInputType == Enum.UserInputType.Touch) then
+            updateSlider(input.Position.X)
+        end
+    end)
+
+    -- При изменении размера сразу обновляем
+    sliderBack:GetPropertyChangedSignal("AbsoluteSize"):Connect(function()
+        updateSlider(sliderBack.AbsolutePosition.X + fill.Size.X.Scale * sliderBack.AbsoluteSize.X)
+    end)
+end
+
+local function createButton(parent, buttonText, callback)
+    local container = Instance.new("Frame")
+    container.Size = UDim2.new(1, -10, 0, 40)
+    container.BackgroundTransparency = 1
+    container.LayoutOrder = #parent:GetChildren() + 1
+    container.Parent = parent
+
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.new(1,0,1,0)
+    btn.BackgroundColor3 = Color3.fromRGB(60,60,60)
+    btn.TextColor3 = Color3.fromRGB(255,255,255)
+    btn.Text = buttonText
+    btn.Font = Enum.Font.SourceSansBold
+    btn.TextSize = 18
+    btn.Parent = container
+
+    btn.MouseButton1Click:Connect(function()
+        callback()
+    end)
+end
+
+--///////////// ЗАПОЛНЯЕМ ВКЛАДКИ //////////////
+
+-- ESP TAB
+createCheckbox(ESPFrame, "Enable ESP", ESP_Enabled, function(state) ESP_Enabled = state end)
+createCheckbox(ESPFrame, "ESP Box", ESP_Boxes, function(state) ESP_Boxes = state end)
+createCheckbox(ESPFrame, "ESP Skeleton", ESP_Skeleton, function(state) ESP_Skeleton = state end)
+createCheckbox(ESPFrame, "ESP HP Bar", ESP_HP, function(state) ESP_HP = state end)
+createCheckbox(ESPFrame, "ESP Distance", ESP_Distance, function(state) ESP_Distance = state end)
+createCheckbox(ESPFrame, "ESP Team Check", ESP_TeamCheck, function(state) ESP_TeamCheck = state end)
+
+-- AIM TAB
+createCheckbox(AimFrame, "Enable Aimlock", AIM_ENABLED, function(state)
+    AIM_ENABLED = state
+    FOVCircle.Visible = state
+end)
+createCheckbox(AimFrame, "Aimlock Team Check", AIM_TeamCheck, function(state)
+    AIM_TeamCheck = state
+end)
+createSlider(AimFrame, "FOV Radius", 1, 300, AIM_FOV_RADIUS, function(val)
+    AIM_FOV_RADIUS = val
+end)
+createSlider(AimFrame, "Smoothness", 0, 3, AIM_SMOOTHNESS, function(val)
+    AIM_SMOOTHNESS = val
+end)
+
+-- Радиокнопки для выбора Aim Part
+do
+    local container = Instance.new("Frame")
+    container.Size = UDim2.new(1, -10, 0, 60)
+    container.BackgroundTransparency = 1
+    container.LayoutOrder = #AimFrame:GetChildren() + 1
+    container.Parent = AimFrame
+
+    local label = Instance.new("TextLabel")
+    label.Size = UDim2.new(1, 0, 0, 20)
+    label.BackgroundTransparency = 1
+    label.Text = "Aim Part:"
+    label.TextColor3 = Color3.new(1,1,1)
+    label.Font = Enum.Font.SourceSans
+    label.TextSize = 18
+    label.TextXAlignment = Enum.TextXAlignment.Left
+    label.Parent = container
+
+    local btnFrame = Instance.new("Frame")
+    btnFrame.Size = UDim2.new(1,0,0,30)
+    btnFrame.Position = UDim2.new(0,0,0,20)
+    btnFrame.BackgroundTransparency = 1
+    btnFrame.Parent = container
+
+    local layout = Instance.new("UIListLayout")
+    layout.FillDirection = Enum.FillDirection.Horizontal
+    layout.Padding = UDim.new(0,5)
+    layout.Parent = btnFrame
+
+    local radioOptions = {"Head","Chest","Arms","Legs"}
+    local radioButtons = {}
+
+    local function updateAimPart(selected)
+        AIM_Part = selected
+        for _, info in pairs(radioButtons) do
+            if info.Option == selected then
+                info.Button.BackgroundColor3 = Color3.fromRGB(0,255,0)
+                info.Button.Text = "✓"
+            else
+                info.Button.BackgroundColor3 = Color3.fromRGB(60,60,60)
+                info.Button.Text = ""
+            end
+        end
+    end
+
+    for _, option in ipairs(radioOptions) do
+        local btn = Instance.new("TextButton")
+        btn.Size = UDim2.new(0,30,0,30)
+        btn.BackgroundColor3 = (option == "Head") and Color3.fromRGB(0,255,0) or Color3.fromRGB(60,60,60)
+        btn.Text = (option == "Head") and "✓" or ""
+        btn.TextColor3 = Color3.new(0,0,0)
+        btn.Font = Enum.Font.SourceSansBold
+        btn.TextSize = 24
+        btn.Parent = btnFrame
+
+        btn.MouseButton1Click:Connect(function()
+            updateAimPart(option)
+        end)
+
+        radioButtons[option] = {Button = btn, Option = option}
+    end
+end
+
+-- MISC TAB
+createCheckbox(MiscFrame, "Enable Chams", CHAMS_Enabled, function(state)
+    CHAMS_Enabled = state
+    updateAllChams()
+end)
+createSlider(MiscFrame, "Chams R", 0, 255, CHAMS_R, function(val)
+    CHAMS_R = math.floor(val)
+    updateAllChams()
+end)
+createSlider(MiscFrame, "Chams G", 0, 255, CHAMS_G, function(val)
+    CHAMS_G = math.floor(val)
+    updateAllChams()
+end)
+createSlider(MiscFrame, "Chams B", 0, 255, CHAMS_B, function(val)
+    CHAMS_B = math.floor(val)
+    updateAllChams()
+end)
+createSlider(MiscFrame, "Chams Transparency", 0, 1, CHAMS_Transparency, function(val)
+    CHAMS_Transparency = val
+    updateAllChams()
+end)
+
+createCheckbox(MiscFrame, "Enable Camera FOV", CAMERA_FOV_Enabled, function(state)
+    CAMERA_FOV_Enabled = state
+    if not state then
+        -- если выключили, возвращаем дефолт
+        Camera.FieldOfView = 70
+    else
+        -- включили – сразу ставим текущее значение
+        Camera.FieldOfView = CAMERA_FOV_Value
+    end
+end)
+
+createSlider(MiscFrame, "Camera FOV", 70, 120, CAMERA_FOV_Value, function(val)
+    CAMERA_FOV_Value = val
+    if CAMERA_FOV_Enabled then
+        Camera.FieldOfView = val
+    end
+end)
+
+createButton(MiscFrame, "Teleport Kill", function()
+    teleportKill()
+end)
+
+--///////////// ПЕРЕКЛЮЧЕНИЕ ВКЛАДОК //////////////
+local function switchTab(tabName)
+    ESPFrame.Visible = false
+    AimFrame.Visible = false
+    MiscFrame.Visible = false
+    ESPTabBtn.BackgroundColor3 = Color3.fromRGB(35,35,35)
+    AimTabBtn.BackgroundColor3 = Color3.fromRGB(35,35,35)
+    MiscTabBtn.BackgroundColor3 = Color3.fromRGB(35,35,35)
+
+    if tabName == "ESP" then
+        ESPFrame.Visible = true
+        ESPTabBtn.BackgroundColor3 = Color3.fromRGB(55,55,55)
+    elseif tabName == "AIM" then
+        AimFrame.Visible = true
+        AimTabBtn.BackgroundColor3 = Color3.fromRGB(55,55,55)
+    else
+        MiscFrame.Visible = true
+        MiscTabBtn.BackgroundColor3 = Color3.fromRGB(55,55,55)
+    end
+end
+
+ESPTabBtn.MouseButton1Click:Connect(function() switchTab("ESP") end)
+AimTabBtn.MouseButton1Click:Connect(function() switchTab("AIM") end)
+MiscTabBtn.MouseButton1Click:Connect(function() switchTab("MISC") end)
+
+--///////////// ОТКРЫТИЕ/ЗАКРЫТИЕ МЕНЮ //////////////
+local menuOpen = false
+
+local function openMenu()
+    menuOpen = true
+    local tweenInfo = TweenInfo.new(0.5, Enum.EasingStyle.Bounce, Enum.EasingDirection.Out)
+    local goal = {Position = UDim2.new(0.5, -200, 0.5, -200)}
+    TweenService:Create(MainFrame, tweenInfo, goal):Play()
+end
+
+local function closeMenu()
+    menuOpen = false
+    local tweenInfo = TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.In)
+    local goal = {Position = UDim2.new(-0.5, 0, 0.5, -200)}
+    TweenService:Create(MainFrame, tweenInfo, goal):Play()
+end
+
+CloseBtn.MouseButton1Click:Connect(function()
+    if menuOpen then
+        closeMenu()
+    else
+        openMenu()
+    end
+end)
+
+local ToggleButton = Instance.new("TextButton")
+ToggleButton.Name = "ToggleButton"
+ToggleButton.Size = UDim2.new(0,120,0,40)
+ToggleButton.Position = UDim2.new(0,10,0,10)
+ToggleButton.BackgroundColor3 = Color3.fromRGB(60,60,60)
+ToggleButton.Text = "Open/Close"
+ToggleButton.TextColor3 = Color3.fromRGB(255,255,255)
+ToggleButton.Font = Enum.Font.SourceSansBold
+ToggleButton.TextSize = 18
+ToggleButton.Parent = screenGui
+
+ToggleButton.MouseButton1Click:Connect(function()
+    if menuOpen then
+        closeMenu()
+    else
+        openMenu()
+    end
+end)
+
+--///////////// ПЕРЕТАСКИВАНИЕ МЕНЮ (ЗАГОЛОВОК) //////////////
+local dragging = false
+local dragInput, startPos, startFramePos
+
+TitleBar.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1
+    or input.UserInputType == Enum.UserInputType.Touch then
+        dragging = true
+        startPos = input.Position
+        startFramePos = MainFrame.Position
+
+        input.Changed:Connect(function()
+            if input.UserInputState == Enum.UserInputState.End then
+                dragging = false
+            end
+        end)
+    end
+end)
+
+TitleBar.InputChanged:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseMovement
+    or input.UserInputType == Enum.UserInputType.Touch then
+        dragInput = input
+    end
+end)
+
+UserInputService.InputChanged:Connect(function(input)
+    if dragging and input == dragInput then
+        local delta = input.Position - startPos
+        MainFrame.Position = UDim2.new(
+            startFramePos.X.Scale,
+            startFramePos.X.Offset + delta.X,
+            startFramePos.Y.Scale,
+            startFramePos.Y.Offset + delta.Y
+        )
+    end
+end)
+
+-- Изначально меню закрыто
+closeMenu()
+
+--///////////// ESP: РИСОВАНИЕ (Drawing API) //////////////
+local BOX_WIDTH = 20
+local BOX_HEIGHT = 60
+local HP_BAR_WIDTH = 4
+local HP_BAR_OFFSET = 2
+
+local HEAD_RADIUS = 2
+local TORSO_LENGTH = 20
+local ARM_LENGTH = 10
+local LEG_LENGTH = 10
+
+local TEXT_SIZE = 16
+local TEXT_OFFSET = 4
+
+local espData = {}
+
+local function worldToScreen(pos)
+    local screenPos, onScreen = Camera:WorldToViewportPoint(pos)
+    if onScreen then
+        return Vector2.new(screenPos.X, screenPos.Y)
+    end
+    return nil
+end
+
+local function createESPForPlayer(player)
+    if player == LocalPlayer then return end
+    if espData[player] then return end
+
+    local data = {}
+    -- Box
+    local boxOutline = Drawing.new("Square")
+    boxOutline.Color = Color3.new(0,0,0)
+    boxOutline.Thickness = 1
+    boxOutline.Filled = false
+    boxOutline.Visible = false
+    data.boxOutline = boxOutline
+
+    local boxInner = Drawing.new("Square")
+    boxInner.Color = Color3.new(1,1,1)
+    boxInner.Thickness = 1
+    boxInner.Filled = false
+    boxInner.Visible = false
+    data.boxInner = boxInner
+
+    -- HP
+    local hpBG = Drawing.new("Square")
+    hpBG.Color = Color3.fromRGB(40,40,40)
+    hpBG.Thickness = 0
+    hpBG.Filled = true
+    hpBG.Visible = false
+    data.hpBG = hpBG
+
+    local hpFill = Drawing.new("Square")
+    hpFill.Color = Color3.fromRGB(0,255,0)
+    hpFill.Thickness = 0
+    hpFill.Filled = true
+    hpFill.Visible = false
+    data.hpFill = hpFill
+
+    -- Skeleton
+    local headCircle = Drawing.new("Circle")
+    headCircle.Radius = HEAD_RADIUS
+    headCircle.Color = Color3.new(1,1,1)
+    headCircle.Thickness = 1
+    headCircle.Filled = false
+    headCircle.Visible = false
+    data.headCircle = headCircle
+
+    local torsoLine = Drawing.new("Line")
+    torsoLine.Color = Color3.new(1,1,1)
+    torsoLine.Thickness = 1
+    torsoLine.Visible = false
+    data.torsoLine = torsoLine
+
+    local leftArm = Drawing.new("Line")
+    leftArm.Color = Color3.new(1,1,1)
+    leftArm.Thickness = 1
+    leftArm.Visible = false
+    data.leftArm = leftArm
+
+    local rightArm = Drawing.new("Line")
+    rightArm.Color = Color3.new(1,1,1)
+    rightArm.Thickness = 1
+    rightArm.Visible = false
+    data.rightArm = rightArm
+
+    local leftLeg = Drawing.new("Line")
+    leftLeg.Color = Color3.new(1,1,1)
+    leftLeg.Thickness = 1
+    leftLeg.Visible = false
+    data.leftLeg = leftLeg
+
+    local rightLeg = Drawing.new("Line")
+    rightLeg.Color = Color3.new(1,1,1)
+    rightLeg.Thickness = 1
+    rightLeg.Visible = false
+    data.rightLeg = rightLeg
+
+    -- Distance
+    local distText = Drawing.new("Text")
+    distText.Text = ""
+    distText.Color = Color3.new(1,1,1)
+    distText.Size = TEXT_SIZE
+    distText.Center = true
+    distText.Outline = true
+    distText.OutlineColor = Color3.new(0,0,0)
+    distText.Visible = false
+    data.distText = distText
+
+    espData[player] = data
+end
+
+local function removeESPForPlayer(player)
+    local data = espData[player]
+    if data then
+        for _, obj in pairs(data) do
+            if obj and obj.Remove then
+                pcall(function() obj:Remove() end)
+            end
+        end
+        espData[player] = nil
+    end
+end
+
+for _, plr in ipairs(Players:GetPlayers()) do
+    createESPForPlayer(plr)
+end
+Players.PlayerAdded:Connect(createESPForPlayer)
+Players.PlayerRemoving:Connect(removeESPForPlayer)
+
+RunService.RenderStepped:Connect(function()
+    for player, data in pairs(espData) do
+        local char = player.Character
+        if not ESP_Enabled or not char or not char:FindFirstChild("Head") then
+            -- Скрываем все
+            for _, obj in pairs(data) do
+                obj.Visible = false
+            end
+        else
+            -- TeamCheck
+            if ESP_TeamCheck and LocalPlayer.Team and player.Team and LocalPlayer.Team == player.Team then
+                for _, obj in pairs(data) do
+                    obj.Visible = false
+                end
+            else
+                local head = char.Head
+                local headScreen = worldToScreen(head.Position)
+                if headScreen then
+                    local boxX = headScreen.X - (BOX_WIDTH/2)
+                    local boxY = headScreen.Y
+
+                    -- Box
+                    data.boxOutline.Visible = ESP_Boxes
+                    data.boxInner.Visible = ESP_Boxes
+                    data.boxOutline.Size = Vector2.new(BOX_WIDTH, BOX_HEIGHT)
+                    data.boxOutline.Position = Vector2.new(boxX, boxY)
+                    data.boxInner.Size = Vector2.new(BOX_WIDTH-2, BOX_HEIGHT-2)
+                    data.boxInner.Position = Vector2.new(boxX+1, boxY+1)
+
+                    -- HP
+                    data.hpBG.Visible = ESP_HP
+                    data.hpFill.Visible = ESP_HP
+                    local hpX = boxX - HP_BAR_WIDTH - HP_BAR_OFFSET
+                    local hpY = boxY
+                    data.hpBG.Size = Vector2.new(HP_BAR_WIDTH, BOX_HEIGHT)
+                    data.hpBG.Position = Vector2.new(hpX, hpY)
+                    local humanoid = char:FindFirstChildOfClass("Humanoid")
+                    local healthPercent = 1
+                    if humanoid then
+                        healthPercent = math.clamp(humanoid.Health / humanoid.MaxHealth, 0, 1)
+                    end
+                    local fillH = BOX_HEIGHT * healthPercent
+                    local fillY = hpY + (BOX_HEIGHT - fillH)
+                    data.hpFill.Size = Vector2.new(HP_BAR_WIDTH, fillH)
+                    data.hpFill.Position = Vector2.new(hpX, fillY)
+
+                    -- Skeleton
+                    data.headCircle.Visible = ESP_Skeleton
+                    data.torsoLine.Visible = ESP_Skeleton
+                    data.leftArm.Visible = ESP_Skeleton
+                    data.rightArm.Visible = ESP_Skeleton
+                    data.leftLeg.Visible = ESP_Skeleton
+                    data.rightLeg.Visible = ESP_Skeleton
+                    local centerX = boxX + (BOX_WIDTH/2)
+                    local headPos = Vector2.new(centerX, boxY + HEAD_RADIUS + 4)
+                    data.headCircle.Position = headPos
+                    local torsoStartY = headPos.Y + HEAD_RADIUS + 2
+                    local torsoEndY = torsoStartY + TORSO_LENGTH
+                    data.torsoLine.From = Vector2.new(centerX, torsoStartY)
+                    data.torsoLine.To   = Vector2.new(centerX, torsoEndY)
+                    data.leftArm.From = Vector2.new(centerX, torsoStartY)
+                    data.leftArm.To   = Vector2.new(centerX - ARM_LENGTH, torsoStartY)
+                    data.rightArm.From = Vector2.new(centerX, torsoStartY)
+                    data.rightArm.To   = Vector2.new(centerX + ARM_LENGTH, torsoStartY)
+                    data.leftLeg.From = Vector2.new(centerX, torsoEndY)
+                    data.leftLeg.To   = Vector2.new(centerX - LEG_LENGTH, torsoEndY + LEG_LENGTH)
+                    data.rightLeg.From = Vector2.new(centerX, torsoEndY)
+                    data.rightLeg.To   = Vector2.new(centerX + LEG_LENGTH, torsoEndY + LEG_LENGTH)
+
+                    -- Distance
+                    data.distText.Visible = ESP_Distance
+                    local distance = (Camera.CFrame.Position - head.Position).Magnitude
+                    data.distText.Text = string.format("%.1f m", distance)
+                    data.distText.Position = Vector2.new(centerX, boxY - TEXT_OFFSET - TEXT_SIZE)
+                else
+                    -- Вне экрана
+                    for _, obj in pairs(data) do
+                        obj.Visible = false
+                    end
+                end
+            end
+        end
+    end
+end)
+
+--///////////// AIMLOCK //////////////
+local function isEnemy(player)
+    if AIM_TeamCheck and LocalPlayer.Team and player.Team then
+        return LocalPlayer.Team ~= player.Team
+    end
+    return true
+end
+
+local function isVisible(targetPos, targetCharacter)
+    local origin = Camera.CFrame.Position
+    local direction = (targetPos - origin)
+    local rayParams = RaycastParams.new()
+    rayParams.FilterType = Enum.RaycastFilterType.Blacklist
+    rayParams.FilterDescendantsInstances = {LocalPlayer.Character, targetCharacter}
+    local result = Workspace:Raycast(origin, direction, rayParams)
+    if result then
+        if result.Instance and result.Instance:IsDescendantOf(targetCharacter) then
+            return true
+        else
+            return false
+        end
+    end
+    return true
+end
+
+local function getClosestTarget()
+    local bestDistance = math.huge
+    local bestPlayer = nil
+    for _, player in pairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer and player.Character and isEnemy(player) then
+            local partName = AIM_Part
+            local aimPart = player.Character:FindFirstChild(partName) or player.Character:FindFirstChild("Head")
+            if aimPart then
+                local screenPos, onScreen = Camera:WorldToViewportPoint(aimPart.Position)
+                if onScreen then
+                    local center = Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y/2)
+                    local dist = (Vector2.new(screenPos.X, screenPos.Y) - center).Magnitude
+                    if dist <= AIM_FOV_RADIUS and isVisible(aimPart.Position, player.Character) then
+                        if dist < bestDistance then
+                            bestDistance = dist
+                            bestPlayer = player
+                        end
+                    end
+                end
+            end
+        end
+    end
+    return bestPlayer
+end
+
+local function aimAt(targetPart)
+    local camCF = Camera.CFrame
+    local newCF = CFrame.new(camCF.Position, targetPart.Position)
+    Camera.CFrame = camCF:Lerp(newCF, AIM_SMOOTHNESS)
+end
+
+RunService.RenderStepped:Connect(function()
+    if AIM_ENABLED then
+        local target = getClosestTarget()
+        if target and target.Character then
+            local partName = AIM_Part
+            local aimPart = target.Character:FindFirstChild(partName) or target.Character:FindFirstChild("Head")
+            if aimPart then
+                aimAt(aimPart)
+            end
+        end
+    end
+
+    -- Если включён Camera FOV, следим за значением
+    if CAMERA_FOV_Enabled then
+        Camera.FieldOfView = CAMERA_FOV_Value
+    end
+end)
+
+--///////////// CHAMS (Highlight) //////////////
+local chamsData = {}
+local function onCharacterAdded(player, char)
+    -- при появлении/респавне
+    if not chamsData[player] then
+        local highlight = Instance.new("Highlight")
+        highlight.Enabled = false
+        highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+        highlight.FillColor = Color3.fromRGB(CHAMS_R, CHAMS_G, CHAMS_B)
+        highlight.FillTransparency = CHAMS_Transparency
+        highlight.OutlineColor = Color3.new(0,0,0)
+        highlight.OutlineTransparency = 0
+        highlight.Parent = char
+        highlight.Adornee = char
+        chamsData[player] = highlight
+    else
+        -- если уже есть highlight
+        local highlight = chamsData[player]
+        highlight.Parent = char
+        highlight.Adornee = char
+    end
+end
+
+local function onPlayerAdded(player)
+    player.CharacterAdded:Connect(function(char)
+        onCharacterAdded(player, char)
+    end)
+    if player.Character then
+        onCharacterAdded(player, player.Character)
+    end
+end
+
+local function onPlayerRemoving(player)
+    if chamsData[player] then
+        chamsData[player]:Destroy()
+        chamsData[player] = nil
+    end
+end
+
+for _, p in ipairs(Players:GetPlayers()) do
+    if p ~= LocalPlayer then
+        onPlayerAdded(p)
+    end
+end
+
+Players.PlayerAdded:Connect(function(p)
+    if p ~= LocalPlayer then
+        onPlayerAdded(p)
+    end
+end)
+
+Players.PlayerRemoving:Connect(onPlayerRemoving)
+
+-- Вызывается при изменении CHAMS_Enabled, цвета или прозрачности
+function updateAllChams()
+    for player, highlight in pairs(chamsData) do
+        if highlight and highlight.Parent then
+            highlight.FillColor = Color3.fromRGB(CHAMS_R, CHAMS_G, CHAMS_B)
+            highlight.FillTransparency = CHAMS_Transparency
+            highlight.Enabled = CHAMS_Enabled
+        end
+    end
+end
+
+--///////////// TELEPORT KILL (к ближайшему врагу) //////////////
+function teleportKill()
+    local bestDistance = math.huge
+    local bestPlayer = nil
+    local myRoot = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+    if not myRoot then return end
+
+    for _, player in pairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer and player.Character and isEnemy(player) then
+            local root = player.Character:FindFirstChild("HumanoidRootPart")
+            if root then
+                local dist = (myRoot.Position - root.Position).Magnitude
+                if dist < bestDistance then
+                    bestDistance = dist
+                    bestPlayer = player
+                end
+            end
+        end
+    end
+
+    if bestPlayer and bestPlayer.Character then
+        local root = bestPlayer.Character:FindFirstChild("HumanoidRootPart")
+        if root then
+            myRoot.CFrame = root.CFrame + Vector3.new(0,3,0)
+        end
+    end
+end
